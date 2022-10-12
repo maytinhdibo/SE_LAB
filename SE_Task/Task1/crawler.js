@@ -36,7 +36,7 @@ async function addData(data) {
 async function fetchData(crawlURL) {
     let response = await axios(crawlURL).catch((err) => console.log(crawlURL));
 
-    if (response.status != 200) {
+    if (response?.status != 200) {
         console.log("Error occurred while fetching data from " + crawlURL);
         return;
     }
@@ -47,7 +47,7 @@ async function getArticlesInfo() {
     const $ = cheerio.load(await fetchData(crawlURL));
     let numbering = 0;
 
-    $('.issue-summary .media-body a').each(async (index, el) => {
+    for(el of $('.issue-summary .media-body a')){
         const articleSummaryLinks = $(el).attr('href');
 
         const $2 = cheerio.load(await fetchData(articleSummaryLinks));
@@ -76,7 +76,7 @@ async function getArticlesInfo() {
             ///arr.push(articleInfo);
             ///console.log(articleInfo);
         });
-    })
+    }
     ///console.log('get ' + new Date().getTime());
     ///console.log(g);
 }
@@ -85,6 +85,7 @@ async function main() {
     await initExcel();
     ///setTimeout(async () => { await getArticlesInfo(); }, 0);
     await getArticlesInfo();
+    console.log("done");
     await workbook.xlsx.writeFile("Articles Infomation.xlsx");
     ///fs.writeFileSync('info.json', JSON.stringify(arr));
     ///setTimeout(() => workbook.xlsx.writeFile("Articles Infomation.xlsx"), 0);
