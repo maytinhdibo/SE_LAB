@@ -4,12 +4,15 @@ const axios = require('axios');
 
 const excel = require('exceljs');
 
+const fs = require('fs');
+
 const crawlURL = 'https://jprp.vn/index.php/JPRP/issue/archive';
 
 let workbook;
 let sheets;
 
 let g;
+let arr = [];
 
 async function initExcel() {
     ///console.log(1);
@@ -26,7 +29,7 @@ async function initExcel() {
 }
 
 async function addData(data) {
-    console.log(data);
+    ///console.log(data);
     await sheets.addRow(data);
 }
 
@@ -50,34 +53,41 @@ async function getArticlesInfo() {
         const $2 = cheerio.load(await fetchData(articleSummaryLinks));
 
         $2('.article-summary.media').each(async (index, el) => {
-            ++numbering;
+            ///++numbering;
             const articleLink = $2(el).find('.col-md-10').find('a').attr('href');
 
             const $3 = cheerio.load(await fetchData(articleLink));
             const arrticleInfoQuery = $3('.article-details');
-            const title = await (async () => arrticleInfoQuery.find('header h2').text().trim())();
-            const authors = await (async () => arrticleInfoQuery.find('#authorString').text().trim())();
-            const releaseDate = await (async () => arrticleInfoQuery.find('.list-group-item.date-published').text().trim().replace(/\n/g, '').replace(/\t/g, '').split(':')[1])();
-            const collection = await (async () => arrticleInfoQuery.find('.issue .panel-body a').text().trim())();
+            const info = await Promise.all([
+                (async () => arrticleInfoQuery.find('header h2').text().trim())(),
+                (async () => arrticleInfoQuery.find('#authorString').text().trim())(),
+                (async () => arrticleInfoQuery.find('.list-group-item.date-published').text().trim().replace(/\n/g, '').replace(/\t/g, '').split(':')[1])(),
+                (async () => arrticleInfoQuery.find('.issue .panel-body a').text().trim())()]);
+
+            ///console.log(info);
             let articleInfo = {
-                'numbering': numbering,
-                'title': title,
-                'authors': authors,
-                'releaseDate': releaseDate,
-                'collection': collection,
+                'numbering': ++numbering,
+                'title': info[0],
+                'authors': info[1],
+                'releaseDate': info[2],
+                'collection': info[3],
             };
-            ///await addData(articleInfo);
-            console.log(articleInfo);
+            await addData(articleInfo);
+            ///arr.push(articleInfo);
+            ///console.log(articleInfo);
         });
     })
     ///console.log('get ' + new Date().getTime());
+    ///console.log(g);
 }
 
 async function main() {
-    initExcel();
+    await initExcel();
+    ///setTimeout(async () => { await getArticlesInfo(); }, 0);
     await getArticlesInfo();
-    workbook.xlsx.writeFile("Articles Infomation.xlsx");
-    ///setTimeout(() => workbook.xlsx.writeFile("Articles Infomation.xlsx"), 10000);
+    await workbook.xlsx.writeFile("Articles Infomation.xlsx");
+    ///fs.writeFileSync('info.json', JSON.stringify(arr));
+    ///setTimeout(() => workbook.xlsx.writeFile("Articles Infomation.xlsx"), 0);
 
     ///console.log('print ' + new Date().getTime());
     ///await workbook.xlsx.writeFileSync("Articles Infomation.xlsx");

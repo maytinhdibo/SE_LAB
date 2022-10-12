@@ -1,97 +1,79 @@
-const cheerio = require('cheerio'); // module cheerio
+const rp = require("request-promise");
+const cheerio = require('cheerio');
+const fs = require('fs');
+const { AsyncLocalStorage } = require("async_hooks");
 
-const request = require('request-promise'); // module request-promise
+const URL = `https://jprp.vn/index.php/JPRP/issue/archive?fbclid=IwAR0wsHq3drGMoG8JsakKwAcvChfEvgNLUAKrN9YzN3-fxzXEk4_43JN0hYU`;
 
-const fs = require('fs'); // module filesystem
+var arr = [];
 
-let totalArticles = 0;
-let data = [];
+let numbering = 0;
 
-const sourceLink = 'https://jprp.vn/index.php/JPRP/issue/archive';
-
-async function getLinks(targetLink, [containerSelector, anchorSelector]) {
-    const links = [];
-
-    await request(targetLink)
-        .then(function (html) {
-
-            const $ = cheerio.load(html) // load HTMl
-
-            $(containerSelector).each((index, el) => {
-                const link = $(el).find(anchorSelector).prop('href').trim();
-                links.push(link);
-            })
+async function getHref(link, htmlSelector) {
+    try {
+        // Lấy dữ liệu từ trang crawl đã được parseDOM
+        var $ = await rp(link);
+    } catch (error) {
+        return error;
+    }
+    var ds = $(htmlSelector);
+    var list = [];
+    ds.each(function (i, e) {
+        list.push({
+            url: e["attribs"]["href"],
+            transform: function (body) {
+                return cheerio.load(body);
+            }
         })
-        .catch(function (err) {
-            alert.log(err);
-        });
+    });
+    return list;
 
-    return links;
-}
+};
 
-async function getDetailsInfo(articleLink) {
-    const detailsInfo = {};
-
-    await request(articleLink)
-        .then(function (html) {
-
-            const $ = cheerio.load(html) // load HTMl
-
-            // Lấy ra thông tin
-            let name;
-            let author;
-            let publishDate;
-            let collectionName;
-
-            $('.article-details header').each((index, el) => {
-                name = $(el).find('h2').text().trim();
-                author = $(el).find('#authorString i').text().trim();
-            })
-            publishDate = $('.list-group-item.date-published')
-                .contents().filter(function () { // Lấy ra Text node
-                    return this.nodeType == 3;
-                })
-                .text().trim();
-            collectionName = $('.panel.panel-default.issue .panel-body a').text().trim();
-
-            totalArticles++;
-
-            Object.assign(detailsInfo, {
-                id: totalArticles,
-                name,
-                author,
-                publishDate,
-                collectionName,
-            });
-
-            data.push(detailsInfo);
-
-        })
-        .catch(function (err) {
-            alert.log(err);
-        });
-
-    return detailsInfo;
-}
-
-async function crawl() {
-    console.time('Crawl time');
-
-    const collectionLinks = await getLinks(sourceLink, ['.issue-summary', '.issue-summary .media-body .title']);
-    console.log(collectionLinks);
-    for (const collectionLink of collectionLinks) {
-        const articleLinks = await getLinks(collectionLink, ['.article-summary.media', '.article-summary.media .media-body a']);
-        console.log(articleLinks);
-        for (const articleLink of articleLinks) {
-            const detailsInfo = await getDetailsInfo(articleLink);
-            console.log(detailsInfo);
-        }
+async function handle(link) {
+    var articleList = await getHref(link, "div.media-list div.article-summary div.media-body div.row div.col-md-10 a");
+    for (article of articleList) {
+        getContentArticle(article);
     }
 
-    fs.writeFileSync('data.json', JSON.stringify(data), 'utf-8');
-
-    console.log("Total articles: " + totalArticles);
-    console.timeEnd('Crawl time');
 }
 
-crawl();
+async function getContentArticle(link) {
+    try {
+        var $ = await rp(link);
+    } catch (error) {
+        console.log(error);
+        return error;
+    }
+    var articleName = $("article.article-details header h2").text().trim();
+    var author = $("#authorString > i").text().trim();
+    var date = $("body > div.pkp_structure_page > div.pkp_structure_content.container > main > div > article > div > section > div.list-group > div.list-group-item.date-published").text().trim();
+    var dateString = date.split('\t');
+    date = dateString[dateString.length - 1];
+    var numberArticleName = $("div.list-group div.issue div.panel-body a.title").text().trim();
+    var newObj = {
+        'numbering': ++numbering,
+        'articleName': articleName,
+        'author': author,
+        'date': date,
+        'numberArticleName': numberArticleName
+    }
+    console.log(newObj);
+    arr.push(newObj);
+    fs.writeFileSync('data.JSON', JSON.stringify(arr));
+}
+
+async function crawler() {
+    var optionList = await getHref({
+        url: URL,
+        transform: function (body) {
+            return cheerio.load(body);
+        }
+    }, "div.issue-summary div.media-body a.title");
+
+    for (var i = 0; i < optionList.length;) {
+        handle(optionList[i++]);
+    }
+}
+
+crawler();
